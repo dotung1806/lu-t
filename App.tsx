@@ -10,17 +10,23 @@ const STORAGE_KEYS = {
   MESSAGES: 'bhxh_chat_history_v2'
 };
 
+const ADMIN_PASSWORD_SECRET = "tung123"; 
+
 const App: React.FC = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [showSettings, setShowSettings] = useState(false);
+  const [testResult, setTestResult] = useState<{success: boolean, message: string} | null>(null);
   
   const [config, setConfig] = useState({
     apiKey: localStorage.getItem('GEMINI_KEY') || '',
     supabaseUrl: localStorage.getItem('SB_URL') || '',
-    supabaseKey: localStorage.getItem('SB_KEY') || ''
+    supabaseKey: localStorage.getItem('SB_KEY') || '',
+    adminPass: localStorage.getItem('ADMIN_PASS') || ''
   });
+
+  const isAdmin = config.adminPass === ADMIN_PASSWORD_SECRET;
 
   useEffect(() => {
     (window as any)._APP_CONFIG = config;
@@ -35,6 +41,24 @@ const App: React.FC = () => {
     const cloudDocs = await dbService.fetchGlobalDocuments();
     setDocuments(cloudDocs);
     setStatus(AppStatus.IDLE);
+  };
+
+  const handleTestConnection = async () => {
+    setTestResult(null);
+    if (!config.supabaseUrl || !config.supabaseKey) {
+      setTestResult({ success: false, message: "Vui lòng nhập đầy đủ thông tin Supabase." });
+      return;
+    }
+    
+    try {
+      const docs = await dbService.fetchGlobalDocuments();
+      setTestResult({ 
+        success: true, 
+        message: `Kết nối thành công! Đã tìm thấy ${docs.length} văn bản. (Nếu vẫn báo lỗi cột 'isGlobal', hãy đợi 1-2 phút để Supabase cập nhật bộ nhớ đệm).` 
+      });
+    } catch (e: any) {
+      setTestResult({ success: false, message: `Lỗi: ${e.message}` });
+    }
   };
 
   useEffect(() => {
@@ -66,32 +90,39 @@ const App: React.FC = () => {
     localStorage.setItem('GEMINI_KEY', config.apiKey);
     localStorage.setItem('SB_URL', config.supabaseUrl);
     localStorage.setItem('SB_KEY', config.supabaseKey);
+    localStorage.setItem('ADMIN_PASS', config.adminPass);
+    setTestResult(null);
     setShowSettings(false);
     refreshData();
   };
 
   const handleAddDocument = useCallback(async (doc: Document) => {
-    if (!config.supabaseUrl) {
-      setShowSettings(true);
+    if (!isAdmin) {
+      alert("Bạn không có quyền quản trị.");
       return;
     }
     setStatus(AppStatus.SYNCING);
-    const result = await dbService.saveDocument(doc);
+    const result = await dbService.saveDocument({ ...doc, author: "Đ.T.Tùng" });
     if (result.success) {
       await refreshData();
     } else {
-      alert(`Lỗi Database: ${result.message}`);
+      if (result.message?.includes("isGlobal") || result.message?.includes("column")) {
+        alert("Lỗi: Supabase chưa cập nhật xong cấu trúc bảng mới (Schema Cache). Vui lòng đợi 1-2 phút và thử lại.");
+      } else {
+        alert(`Lỗi Database: ${result.message}`);
+      }
       setStatus(AppStatus.IDLE);
     }
-  }, [documents, config]);
+  }, [isAdmin, config]);
 
   const handleRemoveDocument = useCallback(async (id: string) => {
+    if (!isAdmin) return;
     if (!window.confirm("Xóa văn bản này khỏi KHO CHUNG của nhóm?")) return;
     setStatus(AppStatus.SYNCING);
     const success = await dbService.deleteDocument(id);
     if (success) await refreshData();
     setStatus(AppStatus.IDLE);
-  }, [config]);
+  }, [isAdmin, config]);
 
   const handleSendMessage = async (text: string) => {
     if (!config.apiKey) {
@@ -123,9 +154,9 @@ const App: React.FC = () => {
       let errorMsg = "Đã xảy ra lỗi không xác định.";
       
       if (error.message === "QUOTA_EXCEEDED") {
-        errorMsg = "⚠️ Hết lượt hỏi miễn phí trong phút này. Vui lòng đợi khoảng 30-60 giây và thử lại. Đây là giới hạn của Google.";
+        errorMsg = "⚠️ Hết lượt hỏi miễn phí trong phút này. Vui lòng đợi khoảng 30-60 giây và thử lại.";
       } else if (error.message === "KEY_MISSING_OR_INVALID") {
-        errorMsg = "❌ API Key chưa đúng hoặc không hợp lệ. Vui lòng kiểm tra lại trong phần Cài đặt.";
+        errorMsg = "❌ API Key chưa đúng hoặc không hợp lệ. Vui lòng kiểm tra lại.";
       } else {
         errorMsg = `Lỗi hệ thống: ${error.message}`;
       }
@@ -149,7 +180,7 @@ const App: React.FC = () => {
           <div>
             <h1 className="text-sm font-black text-slate-800 uppercase tracking-tighter">BHXH Digital Assistant</h1>
             <p className="text-[9px] font-bold text-blue-500 flex items-center gap-1">
-               <i className="fa-solid fa-circle text-[6px] animate-pulse"></i> 
+               <i className={`fa-solid fa-circle text-[6px] ${status === AppStatus.SYNCING ? 'animate-pulse text-blue-500' : 'text-emerald-500'}`}></i> 
                {status === AppStatus.SYNCING ? "ĐANG ĐỒNG BỘ..." : "TRỰC TUYẾN - NHÓM CHÂU THÀNH"}
             </p>
           </div>
@@ -165,8 +196,11 @@ const App: React.FC = () => {
           </button>
           <div className="h-6 w-[1px] bg-slate-200 mx-2"></div>
           <div className="text-right hidden sm:block">
-             <p className="text-[10px] font-bold text-slate-400">HỆ THỐNG</p>
-             <p className="text-[11px] font-black text-slate-700">Đ.T.Tùng</p>
+             <p className="text-[10px] font-bold text-slate-400 flex items-center justify-end gap-1">
+               {isAdmin && <i className="fa-solid fa-shield-halved text-emerald-500"></i>}
+               {isAdmin ? "QUẢN TRỊ VIÊN" : "NHÂN VIÊN"}
+             </p>
+             <p className="text-[11px] font-black text-slate-700">{isAdmin ? "Đ.T.Tùng" : "Đang sử dụng"}</p>
           </div>
         </div>
       </nav>
@@ -177,6 +211,7 @@ const App: React.FC = () => {
             documents={documents} 
             onAddDocument={handleAddDocument}
             onRemoveDocument={handleRemoveDocument}
+            isAdmin={isAdmin}
           />
         </div>
         <div className="flex-1 h-full min-w-0">
@@ -194,7 +229,7 @@ const App: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           <span className="uppercase">Phiên bản Desktop 2.5</span>
-          <span className="text-blue-600">BHXH AN GIANG</span>
+          <span className="text-blue-600">BHXH CHÂU THÀNH</span>
         </div>
       </footer>
 
@@ -204,19 +239,22 @@ const App: React.FC = () => {
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                <h3 className="font-black text-slate-800 flex items-center gap-2 uppercase tracking-tight">
                  <i className="fa-solid fa-screwdriver-wrench text-blue-600"></i>
-                 Kết nối hệ thống nhóm
+                 Cài đặt hệ thống
                </h3>
-               {config.apiKey && (
-                 <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-red-500"><i className="fa-solid fa-xmark"></i></button>
-               )}
+               <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-red-500"><i className="fa-solid fa-xmark"></i></button>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 mb-2">
-                <p className="text-[10px] text-blue-700 font-bold leading-tight">
-                  <i className="fa-solid fa-info-circle mr-1"></i>
-                  Bạn chỉ cần nhập các mã này 1 lần duy nhất. Liên hệ Admin để lấy mã kết nối chung cho cả đơn vị.
-                </p>
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Mã Quản Trị (Mặc định: tung123)</label>
+                <input 
+                  type="password" 
+                  className="w-full p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                  value={config.adminPass}
+                  onChange={(e) => setConfig({...config, adminPass: e.target.value})}
+                  placeholder="Nhập mã để được quyền tải/xóa file"
+                />
               </div>
+              <div className="h-[1px] bg-slate-100 my-2"></div>
               <div>
                 <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">1. Gemini AI Key</label>
                 <input 
@@ -247,14 +285,28 @@ const App: React.FC = () => {
                   placeholder="Mã bảo mật Database"
                 />
               </div>
+
+              {testResult && (
+                <div className={`p-3 rounded-xl text-[10px] font-bold animate-in slide-in-from-top-2 duration-300 ${testResult.success ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
+                   {testResult.message}
+                </div>
+              )}
               
-              <button 
-                onClick={saveConfig}
-                className="w-full py-3.5 bg-blue-700 text-white rounded-xl text-xs font-black shadow-lg shadow-blue-100 hover:bg-blue-800 transition-all active:scale-95 mt-2 flex items-center justify-center gap-2"
-              >
-                <i className="fa-solid fa-plug-circle-check"></i>
-                KẾT NỐI VÀ BẮT ĐẦU
-              </button>
+              <div className="flex gap-2 mt-4">
+                <button 
+                  onClick={handleTestConnection}
+                  className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl text-[10px] font-black hover:bg-slate-200 transition-all active:scale-95"
+                >
+                  KIỂM TRA KẾT NỐI
+                </button>
+                <button 
+                  onClick={saveConfig}
+                  className="flex-[2] py-3 bg-blue-700 text-white rounded-xl text-[10px] font-black shadow-lg shadow-blue-100 hover:bg-blue-800 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <i className="fa-solid fa-save"></i>
+                  LƯU CẤU HÌNH
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -10,12 +10,11 @@ interface KnowledgeBaseProps {
   documents: Document[];
   onAddDocument: (doc: Document) => void;
   onRemoveDocument: (id: string) => void;
+  isAdmin: boolean;
 }
 
-const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument, onRemoveDocument }) => {
+const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument, onRemoveDocument, isAdmin }) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [docName, setDocName] = useState('');
-  const [manualText, setManualText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -25,11 +24,11 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) return;
     const files = e.target.files;
     if (!files || files.length === 0) return;
     setIsProcessing(true);
     
-    // Fix: Explicitly cast Array.from result to File[] to avoid 'unknown' type errors
     for (const file of Array.from(files) as File[]) {
       const extension = file.name.split('.').pop()?.toLowerCase();
       try {
@@ -58,7 +57,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
             content: content,
             uploadDate: new Date().toISOString(),
             isGlobal: true,
-            author: "Admin"
+            author: "Đ.T.Tùng"
           });
         }
       } catch (error) {
@@ -66,6 +65,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
       }
     }
     setIsProcessing(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   return (
@@ -75,22 +75,24 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
           <i className="fa-solid fa-database text-blue-600"></i>
           Kho Văn Bản Chung
         </h2>
-        <p className="text-[10px] text-slate-500 font-medium mt-1">Dữ liệu được đồng bộ cho tất cả đồng nghiệp.</p>
+        <p className="text-[10px] text-slate-500 font-medium mt-1">Nơi lưu trữ tài liệu chuẩn của đơn vị.</p>
       </div>
 
       <div className="p-4 space-y-4 flex-1 overflow-y-auto custom-scrollbar">
-        {/* Nút tải lên */}
-        <div className="relative">
-          <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple />
-          <button 
-            onClick={() => fileInputRef.current?.click()} 
-            disabled={isProcessing}
-            className="w-full py-3 border-2 border-dashed border-blue-200 bg-blue-50/30 text-blue-600 rounded-lg text-xs hover:bg-blue-50 hover:border-blue-300 transition-all flex flex-col items-center gap-1 font-bold"
-          >
-             {isProcessing ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-cloud-arrow-up"></i>}
-             <span>{isProcessing ? "ĐANG TẢI LÊN CLOUD..." : "TẢI VĂN BẢN MỚI LÊN NHÓM"}</span>
-          </button>
-        </div>
+        {/* Nút tải lên - Chỉ hiện cho Admin */}
+        {isAdmin && (
+          <div className="relative">
+            <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple />
+            <button 
+              onClick={() => fileInputRef.current?.click()} 
+              disabled={isProcessing}
+              className="w-full py-3 border-2 border-dashed border-blue-200 bg-blue-50/30 text-blue-600 rounded-lg text-xs hover:bg-blue-50 hover:border-blue-300 transition-all flex flex-col items-center gap-1 font-bold"
+            >
+               {isProcessing ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-cloud-arrow-up"></i>}
+               <span>{isProcessing ? "ĐANG TẢI LÊN CLOUD..." : "TẢI VĂN BẢN MỚI LÊN NHÓM"}</span>
+            </button>
+          </div>
+        )}
 
         {/* Danh sách văn bản */}
         <div className="space-y-2">
@@ -108,13 +110,15 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                     <p className="text-[11px] font-bold text-slate-800 truncate">{doc.name}</p>
                     <div className="flex justify-between items-center mt-1">
                       <span className="text-[8px] text-slate-400">
-                        {new Date(doc.uploadDate).toLocaleDateString('vi-VN')} • By {doc.author || "Tùng"}
+                        {new Date(doc.uploadDate).toLocaleDateString('vi-VN')} • Admin {doc.author || "Tùng"}
                       </span>
                     </div>
                   </div>
-                  <button onClick={() => onRemoveDocument(doc.id)} className="text-slate-300 hover:text-red-500 p-1">
-                    <i className="fa-solid fa-trash-can text-[10px]"></i>
-                  </button>
+                  {isAdmin && (
+                    <button onClick={() => onRemoveDocument(doc.id)} className="text-slate-300 hover:text-red-500 p-1">
+                      <i className="fa-solid fa-trash-can text-[10px]"></i>
+                    </button>
+                  )}
                 </div>
               </div>
             ))
