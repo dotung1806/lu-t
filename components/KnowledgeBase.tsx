@@ -53,10 +53,10 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
           onAddDocument({
             id: Math.random().toString(36).substr(2, 9),
             name: file.name,
-            type: file.type,
+            type: file.type || 'application/octet-stream',
             content: content,
-            uploadDate: new Date().toISOString(),
-            isGlobal: true,
+            upload_date: new Date().toISOString(),
+            is_global: true,
             author: "Đ.T.Tùng"
           });
         }
@@ -79,22 +79,20 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
       </div>
 
       <div className="p-4 space-y-4 flex-1 overflow-y-auto custom-scrollbar">
-        {/* Nút tải lên - Chỉ hiện cho Admin */}
         {isAdmin && (
           <div className="relative">
             <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple />
             <button 
               onClick={() => fileInputRef.current?.click()} 
               disabled={isProcessing}
-              className="w-full py-3 border-2 border-dashed border-blue-200 bg-blue-50/30 text-blue-600 rounded-lg text-xs hover:bg-blue-50 hover:border-blue-300 transition-all flex flex-col items-center gap-1 font-bold"
+              className="w-full py-3 border-2 border-dashed border-blue-200 bg-blue-50/30 text-blue-600 rounded-lg text-xs hover:bg-blue-50 hover:border-blue-300 transition-all flex flex-col items-center gap-1 font-bold shadow-sm active:scale-[0.98]"
             >
                {isProcessing ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-cloud-arrow-up"></i>}
-               <span>{isProcessing ? "ĐANG TẢI LÊN CLOUD..." : "TẢI VĂN BẢN MỚI LÊN NHÓM"}</span>
+               <span>{isProcessing ? "ĐANG ĐỒNG BỘ CLOUD..." : "TẢI VĂN BẢN MỚI LÊN NHÓM"}</span>
             </button>
           </div>
         )}
 
-        {/* Danh sách văn bản */}
         <div className="space-y-2">
           {documents.length === 0 ? (
             <div className="text-center py-10 text-slate-400">
@@ -110,7 +108,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                     <p className="text-[11px] font-bold text-slate-800 truncate">{doc.name}</p>
                     <div className="flex justify-between items-center mt-1">
                       <span className="text-[8px] text-slate-400">
-                        {new Date(doc.uploadDate).toLocaleDateString('vi-VN')} • Admin {doc.author || "Tùng"}
+                        {new Date(doc.upload_date).toLocaleDateString('vi-VN')} • Admin {doc.author || "Tùng"}
                       </span>
                     </div>
                   </div>

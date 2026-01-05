@@ -10,7 +10,6 @@ const STORAGE_KEYS = {
   MESSAGES: 'bhxh_chat_history_v2'
 };
 
-// Mật khẩu bí mật của bạn - Không hiển thị trên giao diện
 const ADMIN_PASSWORD_SECRET = "tung123"; 
 
 const App: React.FC = () => {
@@ -59,7 +58,7 @@ const App: React.FC = () => {
       const docs = await dbService.fetchGlobalDocuments();
       setTestResult({ 
         success: true, 
-        message: `Kết nối máy chủ thành công! Tìm thấy ${docs.length} văn bản.` 
+        message: `Kết nối thành công! Hệ thống đã nhận diện được cấu hình máy chủ.` 
       });
     } catch (e: any) {
       setTestResult({ success: false, message: `Lỗi kết nối: ${e.message}` });
@@ -103,7 +102,7 @@ const App: React.FC = () => {
 
   const handleAddDocument = useCallback(async (doc: Document) => {
     if (!isAdmin) {
-      alert("Tính năng này chỉ dành cho tài khoản quản trị.");
+      alert("Chỉ quản trị viên mới có quyền cập nhật dữ liệu.");
       return;
     }
     setStatus(AppStatus.SYNCING);
@@ -111,15 +110,14 @@ const App: React.FC = () => {
     if (result.success) {
       await refreshData();
     } else {
-      // Hiển thị lỗi thật để dễ xử lý thay vì báo đợi 1 phút
-      alert(`LỖI LƯU DỮ LIỆU: ${result.message}\n\n(Nếu lỗi báo 'column isGlobal does not exist', bạn hãy đợi 30 giây để máy chủ cập nhật rồi thử lại)`);
+      alert(`LỖI LƯU DỮ LIỆU: ${result.message}\n\nLưu ý: Nếu bạn vừa cập nhật Database, hãy đợi 30 giây để máy chủ nhận diện cột mới.`);
       setStatus(AppStatus.IDLE);
     }
   }, [isAdmin, config]);
 
   const handleRemoveDocument = useCallback(async (id: string) => {
     if (!isAdmin) return;
-    if (!window.confirm("Xác nhận xóa văn bản này khỏi kho dữ liệu chung?")) return;
+    if (!window.confirm("Xác nhận xóa văn bản này khỏi kho dữ liệu?")) return;
     setStatus(AppStatus.SYNCING);
     const success = await dbService.deleteDocument(id);
     if (success) await refreshData();
@@ -128,7 +126,7 @@ const App: React.FC = () => {
 
   const handleSendMessage = async (text: string) => {
     if (!config.apiKey) {
-      alert("Hệ thống chưa được cấu hình AI.");
+      alert("Hệ thống chưa được kết nối AI.");
       setShowSettings(true);
       return;
     }
@@ -153,16 +151,12 @@ const App: React.FC = () => {
       setStatus(AppStatus.IDLE);
     } catch (error: any) {
       setStatus(AppStatus.ERROR);
-      let errorMsg = "Đã xảy ra lỗi không xác định.";
-      
+      let errorMsg = "Lỗi không xác định.";
       if (error.message === "QUOTA_EXCEEDED") {
-        errorMsg = "⚠️ Hệ thống AI đang bận (Hết lượt miễn phí trong phút này). Vui lòng thử lại sau 30-60 giây.";
+        errorMsg = "⚠️ Hệ thống AI đang bận. Vui lòng gửi lại yêu cầu sau ít giây.";
       } else if (error.message === "KEY_MISSING_OR_INVALID") {
-        errorMsg = "❌ Cấu hình AI không chính xác. Vui lòng kiểm tra lại cài đặt.";
-      } else {
-        errorMsg = `Lỗi hệ thống: ${error.message}`;
+        errorMsg = "❌ Cấu hình AI không khả dụng.";
       }
-
       setMessages(prev => [...prev, {
         id: 'err',
         role: 'assistant',
@@ -192,7 +186,6 @@ const App: React.FC = () => {
           <button 
             onClick={() => setShowSettings(true)}
             className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-            title="Cài đặt"
           >
             <i className="fa-solid fa-gear text-sm"></i>
           </button>
@@ -222,16 +215,16 @@ const App: React.FC = () => {
       </main>
 
       <footer className="bg-white border-t border-slate-200 px-6 py-1.5 flex justify-between items-center text-[9px] font-bold text-slate-400">
-        <div className="flex gap-4">
+        <div className="flex gap-4 uppercase tracking-tighter">
           <span className="flex items-center gap-1">
             <i className={`fa-solid fa-cloud-check ${config.supabaseUrl ? 'text-emerald-500' : 'text-slate-300'}`}></i> 
-            {config.supabaseUrl ? 'Cloud Server Online' : 'Server Offline'}
+            Cloud {config.supabaseUrl ? 'Connected' : 'Disconnected'}
           </span>
           <span>{documents.length} văn bản nghiệp vụ</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="uppercase">Phiên bản Desktop 2.5</span>
-          <span className="text-blue-600">BHXH CHÂU THÀNH</span>
+        <div className="flex items-center gap-3 uppercase tracking-tighter">
+          <span>Desktop v2.5</span>
+          <span className="text-blue-600 font-black">BHXH CHÂU THÀNH</span>
         </div>
       </footer>
 
@@ -247,51 +240,50 @@ const App: React.FC = () => {
             </div>
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
               <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Mã Xác Thực Quản Trị</label>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Xác thực hệ thống</label>
                 <input 
                   type="password" 
                   className={`w-full p-3 border rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all ${isAdmin ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}
                   value={config.adminPass}
                   onChange={(e) => setConfig({...config, adminPass: e.target.value})}
-                  placeholder="Nhập mã bí mật để mở quyền quản trị"
+                  placeholder="Nhập mã xác thực..."
                 />
-                {isAdmin && <p className="text-[9px] text-emerald-600 font-bold mt-1.5 flex items-center gap-1"><i className="fa-solid fa-check-circle"></i> Đã xác thực thành công</p>}
+                {isAdmin && <p className="text-[9px] text-emerald-600 font-bold mt-1.5 flex items-center gap-1"><i className="fa-solid fa-check-circle"></i> Đã kích hoạt quyền quản trị</p>}
               </div>
               <div className="h-[1px] bg-slate-100 my-2"></div>
               <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">1. AI Gateway Key</label>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Mã AI Gateway</label>
                 <input 
                   type="password" 
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                   value={config.apiKey}
                   onChange={(e) => setConfig({...config, apiKey: e.target.value})}
-                  placeholder="Nhập mã dịch vụ AI"
+                  placeholder="Gateway Key"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">2. Database Endpoint</label>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Địa chỉ máy chủ</label>
                 <input 
                   type="text" 
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none"
                   value={config.supabaseUrl}
                   onChange={(e) => setConfig({...config, supabaseUrl: e.target.value})}
-                  placeholder="Địa chỉ máy chủ lưu trữ"
+                  placeholder="https://..."
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">3. Access Key</label>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Mã truy cập</label>
                 <input 
                   type="password" 
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none"
                   value={config.supabaseKey}
                   onChange={(e) => setConfig({...config, supabaseKey: e.target.value})}
-                  placeholder="Mã truy cập dữ liệu bảo mật"
+                  placeholder="Access Token"
                 />
               </div>
 
               {testResult && (
                 <div className={`p-3 rounded-xl text-[10px] font-bold animate-in slide-in-from-top-2 duration-300 ${testResult.success ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
-                   <i className={`fa-solid ${testResult.success ? 'fa-circle-check' : 'fa-triangle-exclamation'} mr-1`}></i>
                    {testResult.message}
                 </div>
               )}
@@ -299,16 +291,16 @@ const App: React.FC = () => {
               <div className="flex gap-2 mt-4">
                 <button 
                   onClick={handleTestConnection}
-                  className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl text-[10px] font-black hover:bg-slate-200 transition-all active:scale-95 uppercase tracking-tight"
+                  className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl text-[10px] font-black hover:bg-slate-200 transition-all active:scale-95 uppercase"
                 >
-                  Kiểm tra máy chủ
+                  Kiểm tra
                 </button>
                 <button 
                   onClick={saveConfig}
-                  className="flex-[2] py-3 bg-blue-700 text-white rounded-xl text-[10px] font-black shadow-lg shadow-blue-100 hover:bg-blue-800 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-tight"
+                  className="flex-[2] py-3 bg-blue-700 text-white rounded-xl text-[10px] font-black shadow-lg shadow-blue-100 hover:bg-blue-800 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase"
                 >
                   <i className="fa-solid fa-save"></i>
-                  Lưu cấu hình
+                  Lưu thay đổi
                 </button>
               </div>
             </div>

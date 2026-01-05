@@ -22,7 +22,8 @@ export const dbService = {
     if (!url) return [];
     
     try {
-      const response = await fetch(`${url}/rest/v1/documents?select=*&order=uploadDate.desc`, {
+      // Sửa uploadDate thành upload_date trong query
+      const response = await fetch(`${url}/rest/v1/documents?select=*&order=upload_date.desc`, {
         method: "GET",
         headers: getHeaders()
       });
@@ -45,15 +46,15 @@ export const dbService = {
     if (!url) return { success: false, message: "Thiếu thông tin kết nối máy chủ." };
     
     try {
-      // Dữ liệu gửi lên khớp chính xác với lệnh SQL: isGlobal, author
+      // Chuyển toàn bộ keys về snake_case để khớp DB
       const payload = {
         id: doc.id,
         name: doc.name,
         type: doc.type,
         content: doc.content,
-        uploadDate: new Date().toISOString(),
-        isGlobal: true, // Khớp với cột "isGlobal" trong SQL
-        author: doc.author || "Đ.T.Tùng" // Khớp với cột "author" trong SQL
+        upload_date: new Date().toISOString(),
+        is_global: true,
+        author: doc.author || "Đ.T.Tùng"
       };
 
       const response = await fetch(`${url}/rest/v1/documents`, {
@@ -67,7 +68,6 @@ export const dbService = {
 
       if (!response.ok) {
         const err = await response.json();
-        // Trả về lỗi chi tiết từ Supabase
         return { success: false, message: err.message || JSON.stringify(err) };
       }
 
