@@ -1,50 +1,53 @@
 
 import { Document } from "../types";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
+const getHeaders = () => {
+  const config = (window as any)._APP_CONFIG || {};
+  const key = config.supabaseKey || process.env.SUPABASE_ANON_KEY || "";
+  return {
+    "Content-Type": "application/json",
+    "apikey": key,
+    "Authorization": `Bearer ${key}`
+  };
+};
 
-const headers = {
-  "Content-Type": "application/json",
-  "apikey": SUPABASE_ANON_KEY,
-  "Authorization": `Bearer ${SUPABASE_ANON_KEY}`
+const getUrl = () => {
+  const config = (window as any)._APP_CONFIG || {};
+  return config.supabaseUrl || process.env.SUPABASE_URL || "";
 };
 
 export const dbService = {
   async fetchGlobalDocuments(): Promise<Document[]> {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      console.warn("Thiếu cấu hình Supabase. Vui lòng Redeploy.");
-      return [];
-    }
+    const url = getUrl();
+    if (!url) return [];
     
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/documents?select=*&isGlobal=eq.true`, {
+      const response = await fetch(`${url}/rest/v1/documents?select=*&order=uploadDate.desc`, {
         method: "GET",
-        headers
+        headers: getHeaders()
       });
-      
       if (!response.ok) return [];
       return await response.json();
     } catch (error) {
-      console.error("DB Connection Error:", error);
       return [];
     }
   },
 
   async saveDocument(doc: Document): Promise<boolean> {
-    if (!SUPABASE_URL) return false;
+    const url = getUrl();
+    if (!url) return false;
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/documents`, {
+      const response = await fetch(`${url}/rest/v1/documents`, {
         method: "POST",
-        headers,
+        headers: getHeaders(),
         body: JSON.stringify({
           id: doc.id,
           name: doc.name,
           type: doc.type,
           content: doc.content,
-          uploadDate: doc.uploadDate,
+          uploadDate: new Date().toISOString(),
           isGlobal: true,
-          author: "Admin"
+          author: doc.author || "Thành viên"
         })
       });
       return response.ok;
@@ -54,11 +57,12 @@ export const dbService = {
   },
 
   async deleteDocument(id: string): Promise<boolean> {
-    if (!SUPABASE_URL) return false;
+    const url = getUrl();
+    if (!url) return false;
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/documents?id=eq.${id}`, {
+      const response = await fetch(`${url}/rest/v1/documents?id=eq.${id}`, {
         method: "DELETE",
-        headers
+        headers: getHeaders()
       });
       return response.ok;
     } catch (error) {

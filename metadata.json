@@ -1,6 +1,18 @@
 {
-  "name": "BHXH cơ sở Châu Thành tỉnh An Giang - Đ.T.Tùng",
-  "description": "Trợ lý ảo chuyên sâu về Luật BHXH và biểu mẫu hành chính cho BHXH cơ sở Châu Thành, An Giang.",
+  "name": "Trợ lý Pháp lý BHXH Châu Thành",
+  "short_name": "BHXH Bot",
+  "description": "Hệ thống hỗ trợ soạn thảo biểu mẫu và tra cứu Luật BHXH - Đ.T.Tùng",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#1d4ed8",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3652/3652191.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
   "requestFramePermissions": [
     "camera",
     "microphone"

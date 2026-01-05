@@ -17,17 +17,23 @@ export async function askLegalAssistant(
   history: Message[], 
   documents: Document[]
 ): Promise<string> {
-  // Khởi tạo instance ngay tại đây để luôn lấy giá trị API_KEY mới nhất từ process.env
-  // Lưu ý: process.env.API_KEY được hệ thống tự động tiêm vào sau khi người dùng chọn Key qua dialog.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Lấy Key từ cấu hình UI nếu có, nếu không thì lấy từ Environment
+  const config = (window as any)._APP_CONFIG || {};
+  const apiKey = config.apiKey || process.env.API_KEY;
+
+  if (!apiKey) {
+    throw new Error("KEY_MISSING_OR_INVALID");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
 
   const knowledgeContext = documents.length > 0 
-    ? `DỮ LIỆU KIẾN THỨC TẠI CHỖ:\n${documents.map((doc, index) => `[Văn bản ${index + 1}]: ${doc.name}\nNội dung: ${doc.content}`).join('\n\n')}`
+    ? `DỮ LIỆU KIẾN THỨC TẠI CHỖ (KHO CHUNG):\n${documents.map((doc, index) => `[Văn bản ${index + 1}]: ${doc.name}\nNội dung: ${doc.content}`).join('\n\n')}`
     : "KHO KIẾN THỨC TRỐNG.";
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: `DỮ LIỆU KIẾN THỨC:\n${knowledgeContext}\n\nYÊU CẦU: ${question}`,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
@@ -35,16 +41,12 @@ export async function askLegalAssistant(
       },
     });
 
-    // Sử dụng .text (property) thay vì .text() (method) theo SDK mới
     return response.text || "AI không trả về nội dung.";
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    
-    // Nếu gặp lỗi do Key chưa được cấp quyền hoặc không tìm thấy dự án
-    if (error.message?.includes("Requested entity was not found") || error.message?.includes("API key not valid")) {
+    if (error.message?.includes("API key not valid") || error.message?.includes("key")) {
        throw new Error("KEY_MISSING_OR_INVALID");
     }
-    
     throw error;
   }
 }
