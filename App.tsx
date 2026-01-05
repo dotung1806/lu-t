@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
   MESSAGES: 'bhxh_chat_history_v2'
 };
 
+// Mật khẩu bí mật của bạn - Không hiển thị trên giao diện
 const ADMIN_PASSWORD_SECRET = "tung123"; 
 
 const App: React.FC = () => {
@@ -110,11 +111,8 @@ const App: React.FC = () => {
     if (result.success) {
       await refreshData();
     } else {
-      if (result.message?.includes("isGlobal") || result.message?.includes("column")) {
-        alert("Lưu ý: Hệ thống đang cập nhật cấu trúc bảng. Vui lòng thử lại sau 1 phút.");
-      } else {
-        alert(`Lỗi hệ thống: ${result.message}`);
-      }
+      // Hiển thị lỗi thật để dễ xử lý thay vì báo đợi 1 phút
+      alert(`LỖI LƯU DỮ LIỆU: ${result.message}\n\n(Nếu lỗi báo 'column isGlobal does not exist', bạn hãy đợi 30 giây để máy chủ cập nhật rồi thử lại)`);
       setStatus(AppStatus.IDLE);
     }
   }, [isAdmin, config]);
@@ -158,7 +156,7 @@ const App: React.FC = () => {
       let errorMsg = "Đã xảy ra lỗi không xác định.";
       
       if (error.message === "QUOTA_EXCEEDED") {
-        errorMsg = "⚠️ Hệ thống đang bận do quá nhiều yêu cầu. Vui lòng thử lại sau 30 giây.";
+        errorMsg = "⚠️ Hệ thống AI đang bận (Hết lượt miễn phí trong phút này). Vui lòng thử lại sau 30-60 giây.";
       } else if (error.message === "KEY_MISSING_OR_INVALID") {
         errorMsg = "❌ Cấu hình AI không chính xác. Vui lòng kiểm tra lại cài đặt.";
       } else {
@@ -255,9 +253,9 @@ const App: React.FC = () => {
                   className={`w-full p-3 border rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all ${isAdmin ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}
                   value={config.adminPass}
                   onChange={(e) => setConfig({...config, adminPass: e.target.value})}
-                  placeholder="Nhập mã xác thực để mở khóa tính năng nâng cao"
+                  placeholder="Nhập mã bí mật để mở quyền quản trị"
                 />
-                {isAdmin && <p className="text-[9px] text-emerald-600 font-bold mt-1.5 flex items-center gap-1"><i className="fa-solid fa-check-circle"></i> Đã xác thực quyền Quản trị viên</p>}
+                {isAdmin && <p className="text-[9px] text-emerald-600 font-bold mt-1.5 flex items-center gap-1"><i className="fa-solid fa-check-circle"></i> Đã xác thực thành công</p>}
               </div>
               <div className="h-[1px] bg-slate-100 my-2"></div>
               <div>
@@ -267,7 +265,7 @@ const App: React.FC = () => {
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                   value={config.apiKey}
                   onChange={(e) => setConfig({...config, apiKey: e.target.value})}
-                  placeholder="Mã dịch vụ AI"
+                  placeholder="Nhập mã dịch vụ AI"
                 />
               </div>
               <div>
@@ -277,7 +275,7 @@ const App: React.FC = () => {
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none"
                   value={config.supabaseUrl}
                   onChange={(e) => setConfig({...config, supabaseUrl: e.target.value})}
-                  placeholder="https://..."
+                  placeholder="Địa chỉ máy chủ lưu trữ"
                 />
               </div>
               <div>
@@ -287,7 +285,7 @@ const App: React.FC = () => {
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none"
                   value={config.supabaseKey}
                   onChange={(e) => setConfig({...config, supabaseKey: e.target.value})}
-                  placeholder="Mã truy cập dữ liệu"
+                  placeholder="Mã truy cập dữ liệu bảo mật"
                 />
               </div>
 
