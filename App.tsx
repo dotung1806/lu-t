@@ -6,8 +6,10 @@ import { Document, Message, AppStatus } from './types';
 import { askLegalAssistant } from './services/geminiService';
 import { dbService } from './services/dbService';
 
+// Note: Removed the redundant declare global for window.aistudio to resolve conflicts with pre-defined environment types.
+
 const STORAGE_KEYS = {
-  DOCUMENTS: 'bhxh_legal_docs_local', // Đổi tên để phân biệt với Global
+  DOCUMENTS: 'bhxh_legal_docs_local',
   MESSAGES: 'bhxh_chat_history'
 };
 
@@ -16,22 +18,26 @@ const App: React.FC = () => {
   const [globalDocuments, setGlobalDocuments] = useState<Document[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
+  const [hasApiKey, setHasApiKey] = useState<boolean>(true);
 
-  // Tổng hợp văn bản từ cả Local và Global
   const allDocuments = [...globalDocuments, ...localDocuments];
 
-  // 1. Tải dữ liệu từ LocalStorage và Cloud khi khởi chạy
   useEffect(() => {
     const initData = async () => {
       setStatus(AppStatus.SYNCING);
       
-      // Load Local
+      // Fix: Access window.aistudio through casting to avoid TypeScript conflicts while utilizing the environment-provided interface
+      const aiStudio = (window as any).aistudio;
+      if (aiStudio) {
+        const selected = await aiStudio.hasSelectedApiKey();
+        setHasApiKey(selected);
+      }
+
       const savedDocs = localStorage.getItem(STORAGE_KEYS.DOCUMENTS);
       if (savedDocs) {
         try { setLocalDocuments(JSON.parse(savedDocs)); } catch (e) {}
       }
 
-      // Load Chat History
       const savedMessages = localStorage.getItem(STORAGE_KEYS.MESSAGES);
       if (savedMessages) {
         try {
@@ -42,7 +48,6 @@ const App: React.FC = () => {
         } catch (e) {}
       }
 
-      // Load Cloud (Global Docs)
       const cloudDocs = await dbService.fetchGlobalDocuments();
       setGlobalDocuments(cloudDocs);
       
@@ -52,26 +57,32 @@ const App: React.FC = () => {
     initData();
   }, []);
 
-  // 2. Lưu localDocuments vào localStorage khi thay đổi
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(localDocuments));
   }, [localDocuments]);
 
-  // 3. Lưu messages vào localStorage khi thay đổi
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
   }, [messages]);
 
+  const handleConnectKey = async () => {
+    const aiStudio = (window as any).aistudio;
+    if (aiStudio) {
+      await aiStudio.openSelectKey();
+      // As per guidelines, assume successful key selection after triggering openSelectKey
+      setHasApiKey(true);
+      window.location.reload(); 
+    }
+  };
+
   const handleAddDocument = useCallback(async (doc: Document) => {
-    // Kiểm tra trùng lặp trong toàn bộ kho
     const isDuplicate = allDocuments.some(d => d.content.trim() === doc.content.trim());
     if (isDuplicate) {
-      alert(`Văn bản "${doc.name}" đã tồn tại trên hệ thống.`);
+      alert(`Văn bản "${doc.name}" đã tồn tại.`);
       return;
     }
 
-    // Hỏi người dùng muốn lưu Local hay Global (Nếu là Admin)
-    const saveToCloud = window.confirm("Bạn có muốn lưu văn bản này lên ĐÁM MÂY để mọi người dùng khác đều thấy không?\n\n(Chọn OK để lưu lên Hệ thống, Cancel để lưu Cá nhân)");
+    const saveToCloud = window.confirm("Lưu lên ĐÁM MÂY (Hệ thống) hay CÁ NHÂN?\n\nOK = Hệ thống | Cancel = Cá nhân");
 
     if (saveToCloud) {
       setStatus(AppStatus.SYNCING);
@@ -79,7 +90,7 @@ const App: React.FC = () => {
       if (success) {
         setGlobalDocuments(prev => [...prev, { ...doc, isGlobal: true }]);
       } else {
-        alert("Lỗi khi lưu lên Cloud. Văn bản sẽ được lưu tạm ở máy này.");
+        alert("Lỗi lưu Cloud. Đã lưu tạm vào máy này.");
         setLocalDocuments(prev => [...prev, doc]);
       }
       setStatus(AppStatus.IDLE);
@@ -90,14 +101,11 @@ const App: React.FC = () => {
 
   const handleRemoveDocument = useCallback(async (id: string, isGlobal?: boolean) => {
     if (isGlobal) {
-      if (!window.confirm("Đây là văn bản HỆ THỐNG. Bạn có chắc muốn xóa nó khỏi Đám mây? (Hành động này ảnh hưởng đến tất cả người dùng)")) return;
-      
+      if (!window.confirm("Xóa văn bản HỆ THỐNG?")) return;
       setStatus(AppStatus.SYNCING);
       const success = await dbService.deleteDocument(id);
       if (success) {
         setGlobalDocuments(prev => prev.filter(d => d.id !== id));
-      } else {
-        alert("Không thể xóa dữ liệu Cloud.");
       }
       setStatus(AppStatus.IDLE);
     } else {
@@ -140,13 +148,19 @@ const App: React.FC = () => {
       
       setMessages(prev => [...prev, assistantMessage]);
       setStatus(AppStatus.IDLE);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error in conversation:", error);
+      
+      // Fix: Follow guidelines to reset key selection state if "Requested entity was not found" error occurs
+      if (error.message?.includes("Requested entity was not found")) {
+        setHasApiKey(false);
+      }
+
       setStatus(AppStatus.ERROR);
       setMessages(prev => [...prev, {
         id: 'err',
         role: 'assistant',
-        text: "Lỗi kết nối AI.",
+        text: "Không thể kết nối AI. Vui lòng kiểm tra lại API Key.",
         timestamp: new Date()
       }]);
     }
@@ -154,6 +168,22 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-slate-100">
+      {/* Banner cảnh báo thiếu Key */}
+      {!hasApiKey && (
+        <div className="bg-amber-500 text-white px-6 py-2 flex justify-between items-center animate-in fade-in slide-in-from-top duration-500">
+          <div className="flex items-center gap-2 text-sm font-bold">
+            <i className="fa-solid fa-triangle-exclamation"></i>
+            Hệ thống chưa nhận diện được API Key. Bạn cần kết nối để sử dụng AI.
+          </div>
+          <button 
+            onClick={handleConnectKey}
+            className="bg-white text-amber-600 px-4 py-1 rounded-full text-xs font-black hover:bg-slate-100 transition-colors shadow-sm"
+          >
+            KẾT NỐI NGAY
+          </button>
+        </div>
+      )}
+
       {/* Navbar */}
       <nav className="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center z-10 shadow-sm">
         <div className="flex items-center gap-3">
@@ -172,8 +202,9 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2">
                 <p className="text-[9px] text-slate-400 font-bold tracking-widest uppercase">Chuyên gia số BHXH 4.0</p>
                 <span className="h-1 w-1 bg-slate-300 rounded-full"></span>
-                <span className="text-[9px] text-blue-500 font-bold flex items-center gap-1">
-                    <i className="fa-solid fa-cloud"></i> Đang kết nối Cloud
+                <span className={`text-[9px] font-bold flex items-center gap-1 ${hasApiKey ? 'text-blue-500' : 'text-amber-500'}`}>
+                    <i className={`fa-solid ${hasApiKey ? 'fa-cloud' : 'fa-circle-xmark'}`}></i> 
+                    {hasApiKey ? 'Đã kết nối Cloud AI' : 'Chưa có API Key'}
                 </span>
             </div>
           </div>
@@ -186,8 +217,11 @@ const App: React.FC = () => {
           >
             <i className="fa-solid fa-trash-can"></i> Xóa lịch sử
           </button>
-          <button className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-full hover:bg-slate-800 transition-all shadow-sm">
-             TRỢ GIÚP
+          <button 
+            onClick={handleConnectKey}
+            className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-full hover:bg-slate-800 transition-all shadow-sm flex items-center gap-2"
+          >
+             <i className="fa-solid fa-key"></i> ĐỔI API KEY
           </button>
         </div>
       </nav>
