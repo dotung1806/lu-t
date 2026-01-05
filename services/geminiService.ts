@@ -28,7 +28,13 @@ export async function askLegalAssistant(
   history: Message[], 
   documents: Document[]
 ): Promise<string> {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+
+  if (!apiKey || apiKey === "YOUR_API_KEY") {
+    return "LỖI HỆ THỐNG: API Key chưa được cấu hình trên máy chủ Deploy. Vui lòng kiểm tra lại biến môi trường.";
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
 
   const knowledgeContext = documents.length > 0 
     ? `DỮ LIỆU KIẾN THỨC VÀ BIỂU MẪU GỐC:\n${documents.map((doc, index) => `[Văn bản ${index + 1}]: ${doc.name}\nNội dung: ${doc.content}`).join('\n\n---\n\n')}`
@@ -40,13 +46,16 @@ export async function askLegalAssistant(
       contents: `DỮ LIỆU GỐC TỪ NGƯỜI DÙNG:\n${knowledgeContext}\n\nYÊU CẦU: ${question}\n\nHãy thiết kế biểu mẫu y hệt mẫu gốc nếu được yêu cầu.`,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.1, // Giữ độ chính xác cao nhất
+        temperature: 0.1,
       },
     });
 
     return response.text || "Tôi không tìm thấy biểu mẫu tương ứng trong dữ liệu.";
   } catch (error: any) {
     console.error("Gemini error:", error);
-    return "Lỗi hệ thống khi thiết kế biểu mẫu.";
+    if (error.message?.includes("429")) {
+      return "Hệ thống đang quá tải do nhiều người dùng cùng lúc (Giới hạn gói miễn phí). Vui lòng thử lại sau 1 phút.";
+    }
+    return "Lỗi kết nối với trí tuệ nhân tạo. Vui lòng thử lại sau.";
   }
 }

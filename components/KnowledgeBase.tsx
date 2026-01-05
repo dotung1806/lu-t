@@ -2,7 +2,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Document } from '../types';
 
-// Declare external libraries from CDN
 declare const pdfjsLib: any;
 declare const mammoth: any;
 declare const XLSX: any;
@@ -12,22 +11,24 @@ interface KnowledgeBaseProps {
   documents: Document[];
   onAddDocument: (doc: Document) => void;
   onRemoveDocument: (id: string) => void;
+  onBulkImport?: (docs: Document[]) => void;
 }
 
-const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument, onRemoveDocument }) => {
+const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument, onRemoveDocument, onBulkImport }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingCount, setProcessingCount] = useState(0);
   const [manualText, setManualText] = useState('');
   const [docName, setDocName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importJsonRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Initialize PDF.js worker
     if (typeof pdfjsLib !== 'undefined') {
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
   }, []);
 
+  // ... (Các hàm extract văn bản giữ nguyên như cũ)
   const extractPdfText = async (arrayBuffer: ArrayBuffer): Promise<string> => {
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let fullText = "";
@@ -56,232 +57,138 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
     return text;
   };
 
-  const extractPptxText = async (arrayBuffer: ArrayBuffer): Promise<string> => {
-    const zip = await JSZip.loadAsync(arrayBuffer);
-    let text = "";
-    const slideFiles = Object.keys(zip.files).filter(name => 
-      name.startsWith("ppt/slides/slide") && name.endsWith(".xml")
-    ).sort((a, b) => {
-        const numA = parseInt(a.replace(/[^0-9]/g, ''));
-        const numB = parseInt(b.replace(/[^0-9]/g, ''));
-        return numA - numB;
-    });
-
-    for (const name of slideFiles) {
-      const content = await zip.files[name].async("string");
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(content, "text/xml");
-      const texts = xmlDoc.getElementsByTagName("a:t");
-      let slideText = "";
-      for (let i = 0; i < texts.length; i++) {
-        slideText += texts[i].textContent + " ";
-      }
-      if (slideText.trim()) {
-        text += `[Slide ${slideFiles.indexOf(name) + 1}]\n${slideText}\n\n`;
-      }
-    }
-    return text;
-  };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
     setIsProcessing(true);
     setProcessingCount(files.length);
-    
-    // Fix: Cast Array.from(files) to File[] to resolve type errors on line 96, 99, 122, 129, 130, and 137
     const fileArray: File[] = Array.from(files);
-    
     for (const file of fileArray) {
       const extension = file.name.split('.').pop()?.toLowerCase();
       try {
         let content = "";
         const arrayBuffer = await file.arrayBuffer();
-
-        switch (extension) {
-          case 'pdf':
-            content = await extractPdfText(arrayBuffer);
-            break;
-          case 'docx':
-          case 'doc':
-            content = await extractDocxText(arrayBuffer);
-            break;
-          case 'xlsx':
-          case 'xls':
-            content = await extractXlsxText(arrayBuffer);
-            break;
-          case 'pptx':
-          case 'ppt':
-            content = await extractPptxText(arrayBuffer);
-            break;
-          case 'txt':
-          case 'json':
-            content = new TextDecoder().decode(arrayBuffer);
-            break;
-          default:
-            console.warn(`Định dạng file ${file.name} không hỗ trợ!`);
-            continue;
-        }
-
+        if (extension === 'pdf') content = await extractPdfText(arrayBuffer);
+        else if (extension === 'docx') content = await extractDocxText(arrayBuffer);
+        else if (extension === 'xlsx') content = await extractXlsxText(arrayBuffer);
+        else if (['txt', 'json'].includes(extension || '')) content = new TextDecoder().decode(arrayBuffer);
+        
         if (content.trim()) {
-          const newDoc: Document = {
+          onAddDocument({
             id: Math.random().toString(36).substr(2, 9),
             name: file.name,
-            type: file.type || 'application/octet-stream',
+            type: file.type,
             content: content,
             uploadDate: new Date().toLocaleDateString('vi-VN')
-          };
-          onAddDocument(newDoc);
+          });
         }
-      } catch (error) {
-        console.error(`Lỗi xử lý file ${file.name}:`, error);
-      }
+      } catch (error) {}
     }
-
     setIsProcessing(false);
-    setProcessingCount(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleManualAdd = () => {
     if (!manualText.trim() || !docName.trim()) return;
-
-    const newDoc: Document = {
+    onAddDocument({
       id: Math.random().toString(36).substr(2, 9),
       name: docName,
       type: 'manual/entry',
       content: manualText,
       uploadDate: new Date().toLocaleDateString('vi-VN')
-    };
-    onAddDocument(newDoc);
-    setManualText('');
-    setDocName('');
+    });
+    setManualText(''); setDocName('');
+  };
+
+  const exportData = () => {
+    const dataStr = JSON.stringify(documents, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Kho_Kien_Thuc_BHXH.json`;
+    link.click();
   };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col overflow-hidden">
-      <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-        <h2 className="font-bold text-slate-800 flex items-center gap-2">
-          <i className="fa-solid fa-book-bookmark text-blue-600"></i>
-          Kho Kiến Thức Pháp Luật
-        </h2>
-        <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">
-          {documents.length} Văn bản
-        </span>
+      <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-col gap-3">
+        <div className="flex justify-between items-center">
+          <h2 className="font-bold text-slate-800 flex items-center gap-2">
+            <i className="fa-solid fa-book-bookmark text-blue-600"></i>
+            Kho Kiến Thức
+          </h2>
+          <span className="bg-blue-100 text-blue-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+            {documents.length} Mục
+          </span>
+        </div>
+        
+        <div className="flex gap-2">
+          <button onClick={exportData} className="flex-1 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-md text-[10px] font-bold hover:bg-blue-50 transition-colors flex items-center justify-center gap-1.5">
+            <i className="fa-solid fa-download"></i> SAO LƯU
+          </button>
+          <button onClick={() => importJsonRef.current?.click()} className="flex-1 py-1.5 bg-white border border-emerald-200 text-emerald-600 rounded-md text-[10px] font-bold hover:bg-emerald-50 transition-colors flex items-center justify-center gap-1.5">
+            <i className="fa-solid fa-upload"></i> NHẬP FILE
+          </button>
+          <input type="file" ref={importJsonRef} onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const docs = JSON.parse(ev.target?.result as string);
+                    if (onBulkImport) onBulkImport(docs);
+                };
+                reader.readAsText(file);
+            }
+          }} accept=".json" className="hidden" />
+        </div>
       </div>
 
       <div className="p-4 space-y-4 flex-1 overflow-y-auto custom-scrollbar">
-        {/* Manual Input Section */}
+        {/* Input */}
         <div className="space-y-3 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Thêm kiến thức nhanh</p>
-          <input 
-            type="text" 
-            placeholder="Tên văn bản (VD: Luật BHXH 2014)"
-            className="w-full p-2 text-sm border border-slate-200 rounded focus:ring-2 focus:ring-blue-500 outline-none text-slate-900"
-            value={docName}
-            onChange={(e) => setDocName(e.target.value)}
-          />
-          <textarea 
-            placeholder="Dán nội dung điều luật, nghị định hoặc thông tư tại đây..."
-            className="w-full p-2 text-sm border border-slate-200 rounded h-24 focus:ring-2 focus:ring-blue-500 outline-none resize-none text-slate-900"
-            value={manualText}
-            onChange={(e) => setManualText(e.target.value)}
-          />
-          <button 
-            onClick={handleManualAdd}
-            disabled={!manualText.trim() || !docName.trim()}
-            className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded text-sm font-semibold transition-colors flex items-center justify-center gap-2"
-          >
-            <i className="fa-solid fa-plus"></i>
-            Thêm Văn Bản
-          </button>
+          <input type="text" placeholder="Tên văn bản..." className="w-full p-2 text-xs border border-slate-200 rounded text-slate-900" value={docName} onChange={(e) => setDocName(e.target.value)} />
+          <textarea placeholder="Nội dung..." className="w-full p-2 text-xs border border-slate-200 rounded h-16 resize-none text-slate-900" value={manualText} onChange={(e) => setManualText(e.target.value)} />
+          <button onClick={handleManualAdd} className="w-full py-1.5 bg-blue-600 text-white rounded text-xs font-bold transition-colors">THÊM NHANH</button>
         </div>
 
-        {/* File Upload Hidden Input */}
+        {/* Upload */}
         <div className="relative">
-          <input 
-            type="file" 
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            className="hidden"
-            accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.txt,.json"
-            multiple
-          />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isProcessing}
-            className={`w-full py-4 border-2 border-dashed ${isProcessing ? 'border-blue-300 bg-blue-50' : 'border-slate-300'} text-slate-500 rounded-lg text-sm hover:border-blue-400 hover:text-blue-500 transition-all flex flex-col items-center gap-2`}
-          >
-            {isProcessing ? (
-              <>
-                <i className="fa-solid fa-spinner fa-spin text-blue-500 text-xl"></i>
-                <span className="text-blue-600 font-medium">Đang xử lý {processingCount} tệp...</span>
-              </>
-            ) : (
-              <>
-                <i className="fa-solid fa-file-export text-xl text-blue-500"></i>
-                <div className="text-center px-2">
-                    <p className="font-semibold text-slate-700">Tải lên tài liệu pháp luật</p>
-                    <p className="text-[10px] opacity-70">Chọn một hoặc nhiều: PDF, Word, Excel, Slide, TXT</p>
-                </div>
-              </>
-            )}
+          <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple />
+          <button onClick={() => fileInputRef.current?.click()} className="w-full py-3 border-2 border-dashed border-slate-300 text-slate-500 rounded-lg text-xs hover:border-blue-400 transition-all flex flex-col items-center gap-1">
+             <i className="fa-solid fa-cloud-arrow-up text-blue-500"></i>
+             <span className="font-bold">TẢI FILE GỐC</span>
           </button>
         </div>
 
-        {/* Documents List */}
+        {/* List */}
         <div className="space-y-2 mt-4">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Danh sách hiện có</p>
-          {documents.length === 0 ? (
-            <div className="text-center py-10 opacity-40">
-              <i className="fa-solid fa-folder-open text-3xl mb-2"></i>
-              <p className="text-sm">Chưa có dữ liệu kiến thức</p>
-            </div>
-          ) : (
-            documents.map(doc => (
-              <div key={doc.id} className="group relative bg-white border border-slate-200 p-3 rounded-lg hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start pr-8">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                        <FileIcon type={doc.name.split('.').pop() || ''} />
-                        <p className="text-sm font-semibold text-slate-800 truncate" title={doc.name}>{doc.name}</p>
-                    </div>
-                    <p className="text-[10px] text-slate-400">{doc.uploadDate} • {doc.content.length.toLocaleString()} ký tự</p>
+          {documents.map(doc => (
+            <div key={doc.id} className="group relative bg-white border border-slate-200 p-3 rounded-lg hover:border-blue-300 transition-colors">
+              <div className="flex items-start gap-2">
+                <div className={`w-1.5 h-10 shrink-0 rounded-full ${doc.isGlobal ? 'bg-blue-500' : 'bg-slate-300'}`} title={doc.isGlobal ? 'Dữ liệu hệ thống' : 'Dữ liệu cá nhân'}></div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[11px] font-bold text-slate-800 truncate">{doc.name}</p>
+                    {doc.isGlobal && <i className="fa-solid fa-cloud text-[9px] text-blue-500" title="Đã lưu Cloud"></i>}
                   </div>
-                  <button 
-                    onClick={() => onRemoveDocument(doc.id)}
-                    className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <i className="fa-solid fa-trash-can text-sm"></i>
-                  </button>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${doc.isGlobal ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-50 text-slate-500 border border-slate-100'} uppercase`}>
+                        {doc.isGlobal ? 'Hệ thống' : 'Cá nhân'}
+                    </span>
+                    <span className="text-[9px] text-slate-400">{doc.uploadDate}</span>
+                  </div>
                 </div>
-                <div className="mt-2 text-[11px] text-slate-500 line-clamp-2 italic">
-                  "{doc.content.substring(0, 150).trim()}..."
-                </div>
+                <button onClick={() => onRemoveDocument(doc.id)} className="p-1 text-slate-300 hover:text-red-500 transition-colors">
+                  <i className="fa-solid fa-xmark text-xs"></i>
+                </button>
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </div>
-      </div>
-      
-      <div className="p-3 bg-amber-50 border-t border-amber-100">
-        <p className="text-[10px] text-amber-700 leading-tight">
-          <i className="fa-solid fa-triangle-exclamation mr-1"></i>
-          Dữ liệu được lưu trữ an toàn trong trình duyệt của bạn.
-        </p>
       </div>
     </div>
   );
 };
-
-const FileIcon: React.FC<{type: string}> = ({ type }) => {
-    const t = type.toLowerCase();
-    if (['pdf'].includes(t)) return <i className="fa-solid fa-file-pdf text-red-500"></i>;
-    if (['docx', 'doc'].includes(t)) return <i className="fa-solid fa-file-word text-blue-500"></i>;
-    if (['xlsx', 'xls'].includes(t)) return <i className="fa-solid fa-file-excel text-emerald-500"></i>;
-    if (['pptx', 'ppt'].includes(t)) return <i className="fa-solid fa-file-powerpoint text-orange-500"></i>;
-    return <i className="fa-solid fa-file-lines text-slate-400"></i>;
-}
 
 export default KnowledgeBase;

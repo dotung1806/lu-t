@@ -5,6 +5,8 @@ export interface Document {
   type: string;
   content: string;
   uploadDate: string;
+  isGlobal?: boolean; // Nếu true, văn bản sẽ hiển thị cho mọi người dùng
+  author?: string;    // Tên người đăng (ví dụ: Đ.T.Tùng)
 }
 
 export interface Message {
@@ -17,5 +19,6 @@ export interface Message {
 export enum AppStatus {
   IDLE = 'IDLE',
   LOADING = 'LOADING',
+  SYNCING = 'SYNCING',
   ERROR = 'ERROR'
 }
