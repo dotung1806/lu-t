@@ -76,10 +76,11 @@ const App: React.FC = () => {
       return;
     }
     setStatus(AppStatus.SYNCING);
-    const success = await dbService.saveDocument(doc);
-    if (success) await refreshData();
-    else {
-      alert("Lỗi kết nối Database.");
+    const result = await dbService.saveDocument(doc);
+    if (result.success) {
+      await refreshData();
+    } else {
+      alert(`Lỗi Database: ${result.message}`);
       setStatus(AppStatus.IDLE);
     }
   }, [documents, config]);
@@ -122,7 +123,7 @@ const App: React.FC = () => {
       let errorMsg = "Đã xảy ra lỗi không xác định.";
       
       if (error.message === "QUOTA_EXCEEDED") {
-        errorMsg = "⚠️ Giới hạn lượt hỏi trong phút của tài khoản miễn phí đã hết. Vui lòng đợi 1 phút và thử lại, hoặc nâng cấp API Key.";
+        errorMsg = "⚠️ Hết lượt hỏi miễn phí trong phút này. Vui lòng đợi khoảng 30-60 giây và thử lại. Đây là giới hạn của Google.";
       } else if (error.message === "KEY_MISSING_OR_INVALID") {
         errorMsg = "❌ API Key chưa đúng hoặc không hợp lệ. Vui lòng kiểm tra lại trong phần Cài đặt.";
       } else {

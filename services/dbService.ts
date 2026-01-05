@@ -26,20 +26,36 @@ export const dbService = {
         method: "GET",
         headers: getHeaders()
       });
-      if (!response.ok) return [];
+      
+      if (response.status === 404) {
+        console.error("LỖI: Bảng 'documents' chưa được tạo trong Supabase. Vui lòng chạy SQL script.");
+        return [];
+      }
+      
+      if (!response.ok) {
+        const err = await response.json();
+        console.error("Supabase Fetch Error:", err);
+        return [];
+      }
+      
       return await response.json();
     } catch (error) {
+      console.error("Database connection failed:", error);
       return [];
     }
   },
 
-  async saveDocument(doc: Document): Promise<boolean> {
+  async saveDocument(doc: Document): Promise<{success: boolean, message?: string}> {
     const url = getUrl();
-    if (!url) return false;
+    if (!url) return { success: false, message: "Thiếu URL Supabase" };
+    
     try {
       const response = await fetch(`${url}/rest/v1/documents`, {
         method: "POST",
-        headers: getHeaders(),
+        headers: {
+            ...getHeaders(),
+            "Prefer": "return=minimal"
+        },
         body: JSON.stringify({
           id: doc.id,
           name: doc.name,
@@ -50,9 +66,19 @@ export const dbService = {
           author: doc.author || "Thành viên"
         })
       });
-      return response.ok;
-    } catch (error) {
-      return false;
+
+      if (response.status === 404) {
+        return { success: false, message: "Bảng 'documents' không tồn tại. Bạn đã chạy SQL trong Supabase chưa?" };
+      }
+
+      if (!response.ok) {
+        const err = await response.json();
+        return { success: false, message: err.message || "Lỗi lưu dữ liệu" };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, message: error.message };
     }
   },
 
