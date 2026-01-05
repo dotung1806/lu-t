@@ -28,10 +28,11 @@ export async function askLegalAssistant(
   history: Message[], 
   documents: Document[]
 ): Promise<string> {
+  // Luôn lấy API Key trực tiếp từ process.env tại thời điểm gọi
   const apiKey = process.env.API_KEY;
 
-  if (!apiKey || apiKey === "YOUR_API_KEY") {
-    return "LỖI HỆ THỐNG: API Key chưa được cấu hình trên máy chủ Deploy. Vui lòng kiểm tra lại biến môi trường.";
+  if (!apiKey) {
+    return "LỖI HỆ THỐNG: API Key chưa được cấu hình. Vui lòng kiểm tra lại Environment Variables trên Vercel.";
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -54,8 +55,8 @@ export async function askLegalAssistant(
   } catch (error: any) {
     console.error("Gemini error:", error);
     if (error.message?.includes("429")) {
-      return "Hệ thống đang quá tải do nhiều người dùng cùng lúc (Giới hạn gói miễn phí). Vui lòng thử lại sau 1 phút.";
+      return "Hệ thống đang quá tải (Gói miễn phí giới hạn tần suất). Vui lòng thử lại sau giây lát.";
     }
-    return "Lỗi kết nối với trí tuệ nhân tạo. Vui lòng thử lại sau.";
+    return "Lỗi kết nối với trí tuệ nhân tạo. Vui lòng kiểm tra kết nối mạng và cấu hình API Key.";
   }
 }
