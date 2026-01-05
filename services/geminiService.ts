@@ -17,7 +17,6 @@ export async function askLegalAssistant(
   history: Message[], 
   documents: Document[]
 ): Promise<string> {
-  // Lấy Key từ cấu hình UI nếu có, nếu không thì lấy từ Environment
   const config = (window as any)._APP_CONFIG || {};
   const apiKey = config.apiKey || process.env.API_KEY;
 
@@ -32,8 +31,9 @@ export async function askLegalAssistant(
     : "KHO KIẾN THỨC TRỐNG.";
 
   try {
+    // Chuyển sang 'gemini-3-flash-preview' để có RPM cao hơn, tránh lỗi 429 Quota
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview',
       contents: `DỮ LIỆU KIẾN THỨC:\n${knowledgeContext}\n\nYÊU CẦU: ${question}`,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
@@ -43,10 +43,17 @@ export async function askLegalAssistant(
 
     return response.text || "AI không trả về nội dung.";
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
+    console.error("Gemini API Error Detail:", error);
+    
+    // Bóc tách lỗi 429 để báo cho người dùng dễ hiểu hơn
+    if (error.message?.includes("429") || error.message?.includes("QUOTA") || error.message?.includes("exhausted")) {
+       throw new Error("QUOTA_EXCEEDED");
+    }
+    
     if (error.message?.includes("API key not valid") || error.message?.includes("key")) {
        throw new Error("KEY_MISSING_OR_INVALID");
     }
+    
     throw error;
   }
 }

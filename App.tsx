@@ -22,7 +22,6 @@ const App: React.FC = () => {
     supabaseKey: localStorage.getItem('SB_KEY') || ''
   });
 
-  // Đồng bộ cấu hình vào biến toàn cục ngay lập tức
   useEffect(() => {
     (window as any)._APP_CONFIG = config;
   }, [config]);
@@ -50,7 +49,6 @@ const App: React.FC = () => {
         } catch (e) {}
       }
       
-      // Nếu chưa có cấu hình, hiện bảng cài đặt ngay
       if (!config.apiKey || !config.supabaseUrl) {
           setShowSettings(true);
       } else {
@@ -120,12 +118,21 @@ const App: React.FC = () => {
       }]);
       setStatus(AppStatus.IDLE);
     } catch (error: any) {
-      console.error(error);
       setStatus(AppStatus.ERROR);
+      let errorMsg = "Đã xảy ra lỗi không xác định.";
+      
+      if (error.message === "QUOTA_EXCEEDED") {
+        errorMsg = "⚠️ Giới hạn lượt hỏi trong phút của tài khoản miễn phí đã hết. Vui lòng đợi 1 phút và thử lại, hoặc nâng cấp API Key.";
+      } else if (error.message === "KEY_MISSING_OR_INVALID") {
+        errorMsg = "❌ API Key chưa đúng hoặc không hợp lệ. Vui lòng kiểm tra lại trong phần Cài đặt.";
+      } else {
+        errorMsg = `Lỗi hệ thống: ${error.message}`;
+      }
+
       setMessages(prev => [...prev, {
         id: 'err',
         role: 'assistant',
-        text: `Lỗi: ${error.message === "KEY_MISSING_OR_INVALID" ? "Cấu hình API Key hoặc Database chưa đúng." : error.message}`,
+        text: errorMsg,
         timestamp: new Date()
       }]);
     }
