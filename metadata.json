@@ -1,0 +1,8 @@
+{
+  "name": "BHXH cơ sở Châu Thành tỉnh An Giang - Đ.T.Tùng",
+  "description": "Trợ lý ảo chuyên sâu về Luật BHXH và biểu mẫu hành chính cho BHXH cơ sở Châu Thành, An Giang.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
