@@ -17,20 +17,9 @@ export async function askLegalAssistant(
   history: Message[], 
   documents: Document[]
 ): Promise<string> {
-  // Lấy API Key an toàn để không bị lỗi 'process is not defined'
-  let apiKey = "";
-  try {
-    apiKey = process.env.API_KEY || "";
-  } catch (e) {
-    console.warn("Không thể truy cập process.env trực tiếp.");
-  }
-
-  if (!apiKey || apiKey === "undefined") {
-    return "LỖI: Hệ thống chưa nhận được API Key.\n\nHướng dẫn: Nếu bạn đang mở web trực tiếp (vercel.app), hãy đảm bảo đã Redeploy sau khi thêm Key. Nếu vẫn lỗi, hãy mở ứng dụng thông qua giao diện Quản lý của AI Studio/Vercel để sử dụng nút 'KẾT NỐI KEY'.";
-  }
-
-  // Khởi tạo instance ngay trước khi gọi để đảm bảo lấy key mới nhất
-  const ai = new GoogleGenAI({ apiKey });
+  // Khởi tạo instance ngay tại đây để luôn lấy giá trị API_KEY mới nhất từ process.env
+  // Lưu ý: process.env.API_KEY được hệ thống tự động tiêm vào sau khi người dùng chọn Key qua dialog.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const knowledgeContext = documents.length > 0 
     ? `DỮ LIỆU KIẾN THỨC TẠI CHỖ:\n${documents.map((doc, index) => `[Văn bản ${index + 1}]: ${doc.name}\nNội dung: ${doc.content}`).join('\n\n')}`
@@ -46,12 +35,16 @@ export async function askLegalAssistant(
       },
     });
 
+    // Sử dụng .text (property) thay vì .text() (method) theo SDK mới
     return response.text || "AI không trả về nội dung.";
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    if (error.message?.includes("API key not valid")) {
-      return "LỖI: API Key không hợp lệ hoặc đã hết hạn.";
+    
+    // Nếu gặp lỗi do Key chưa được cấp quyền hoặc không tìm thấy dự án
+    if (error.message?.includes("Requested entity was not found") || error.message?.includes("API key not valid")) {
+       throw new Error("KEY_MISSING_OR_INVALID");
     }
-    return `Lỗi kết nối AI: ${error.message}`;
+    
+    throw error;
   }
 }
