@@ -6,8 +6,6 @@ import { Document, Message, AppStatus } from './types';
 import { askLegalAssistant } from './services/geminiService';
 import { dbService } from './services/dbService';
 
-// Note: Removed the redundant declare global for window.aistudio to resolve conflicts with pre-defined environment types.
-
 const STORAGE_KEYS = {
   DOCUMENTS: 'bhxh_legal_docs_local',
   MESSAGES: 'bhxh_chat_history'
@@ -26,11 +24,22 @@ const App: React.FC = () => {
     const initData = async () => {
       setStatus(AppStatus.SYNCING);
       
-      // Fix: Access window.aistudio through casting to avoid TypeScript conflicts while utilizing the environment-provided interface
       const aiStudio = (window as any).aistudio;
       if (aiStudio) {
-        const selected = await aiStudio.hasSelectedApiKey();
-        setHasApiKey(selected);
+        try {
+          const selected = await aiStudio.hasSelectedApiKey();
+          setHasApiKey(selected);
+        } catch (e) {
+          console.error("Lỗi kiểm tra API Key:", e);
+        }
+      } else {
+        // Nếu không có aistudio object, kiểm tra xem process.env có key không
+        try {
+          const key = process.env.API_KEY;
+          setHasApiKey(!!key && key !== "undefined");
+        } catch (e) {
+          setHasApiKey(false);
+        }
       }
 
       const savedDocs = localStorage.getItem(STORAGE_KEYS.DOCUMENTS);
@@ -57,21 +66,18 @@ const App: React.FC = () => {
     initData();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(localDocuments));
-  }, [localDocuments]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
-  }, [messages]);
-
   const handleConnectKey = async () => {
     const aiStudio = (window as any).aistudio;
     if (aiStudio) {
-      await aiStudio.openSelectKey();
-      // As per guidelines, assume successful key selection after triggering openSelectKey
-      setHasApiKey(true);
-      window.location.reload(); 
+      try {
+        await aiStudio.openSelectKey();
+        setHasApiKey(true);
+        window.location.reload(); 
+      } catch (e) {
+        alert("Không thể mở trình chọn Key.");
+      }
+    } else {
+      alert("Tính năng 'Kết nối nhanh' chỉ khả dụng khi bạn mở ứng dụng trong khung quản trị của AI Studio/Vercel.\n\nNếu bạn đang dùng web trực tiếp, hãy đảm bảo đã cấu hình API_KEY trong Environment Variables trên Vercel và nhấn 'Redeploy'.");
     }
   };
 
@@ -132,12 +138,11 @@ const App: React.FC = () => {
       timestamp: new Date()
     };
 
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
+    setMessages(prev => [...prev, userMessage]);
     setStatus(AppStatus.LOADING);
 
     try {
-      const responseText = await askLegalAssistant(text, newMessages, allDocuments);
+      const responseText = await askLegalAssistant(text, [...messages, userMessage], allDocuments);
       
       const assistantMessage: Message = {
         id: Math.random().toString(36).substr(2, 9),
@@ -149,18 +154,12 @@ const App: React.FC = () => {
       setMessages(prev => [...prev, assistantMessage]);
       setStatus(AppStatus.IDLE);
     } catch (error: any) {
-      console.error("Error in conversation:", error);
-      
-      // Fix: Follow guidelines to reset key selection state if "Requested entity was not found" error occurs
-      if (error.message?.includes("Requested entity was not found")) {
-        setHasApiKey(false);
-      }
-
+      console.error("Chat Error:", error);
       setStatus(AppStatus.ERROR);
       setMessages(prev => [...prev, {
         id: 'err',
         role: 'assistant',
-        text: "Không thể kết nối AI. Vui lòng kiểm tra lại API Key.",
+        text: `Lỗi: ${error.message || "Không thể kết nối AI."}`,
         timestamp: new Date()
       }]);
     }
@@ -168,66 +167,51 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-slate-100">
-      {/* Banner cảnh báo thiếu Key */}
       {!hasApiKey && (
-        <div className="bg-amber-500 text-white px-6 py-2 flex justify-between items-center animate-in fade-in slide-in-from-top duration-500">
-          <div className="flex items-center gap-2 text-sm font-bold">
+        <div className="bg-amber-500 text-white px-6 py-2 flex justify-between items-center z-50">
+          <div className="flex items-center gap-2 text-xs font-bold">
             <i className="fa-solid fa-triangle-exclamation"></i>
-            Hệ thống chưa nhận diện được API Key. Bạn cần kết nối để sử dụng AI.
+            Hệ thống chưa nhận diện được API Key. Bạn cần cấu hình để sử dụng AI.
           </div>
           <button 
             onClick={handleConnectKey}
-            className="bg-white text-amber-600 px-4 py-1 rounded-full text-xs font-black hover:bg-slate-100 transition-colors shadow-sm"
+            className="bg-white text-amber-600 px-4 py-1 rounded-full text-[10px] font-black hover:bg-slate-100 transition-all shadow-sm"
           >
             KẾT NỐI NGAY
           </button>
         </div>
       )}
 
-      {/* Navbar */}
       <nav className="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center z-10 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-700 rounded-lg flex items-center justify-center text-white shadow-lg shadow-blue-200 relative">
+          <div className="w-10 h-10 bg-blue-700 rounded-lg flex items-center justify-center text-white shadow-lg shadow-blue-200">
              <i className="fa-solid fa-scale-balanced text-lg"></i>
-             {status === AppStatus.SYNCING && (
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center border-2 border-white">
-                    <i className="fa-solid fa-rotate text-[8px] animate-spin"></i>
-                </div>
-             )}
           </div>
           <div>
             <span className="text-sm md:text-base font-black bg-gradient-to-r from-blue-700 to-indigo-800 bg-clip-text text-transparent uppercase tracking-tight">
               BHXH Châu Thành An Giang - Đ.T.Tùng
             </span>
             <div className="flex items-center gap-2">
-                <p className="text-[9px] text-slate-400 font-bold tracking-widest uppercase">Chuyên gia số BHXH 4.0</p>
-                <span className="h-1 w-1 bg-slate-300 rounded-full"></span>
-                <span className={`text-[9px] font-bold flex items-center gap-1 ${hasApiKey ? 'text-blue-500' : 'text-amber-500'}`}>
-                    <i className={`fa-solid ${hasApiKey ? 'fa-cloud' : 'fa-circle-xmark'}`}></i> 
-                    {hasApiKey ? 'Đã kết nối Cloud AI' : 'Chưa có API Key'}
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Chuyên gia số BHXH 4.0</p>
+                <span className={`text-[9px] font-bold ${hasApiKey ? 'text-blue-500' : 'text-amber-500'}`}>
+                    • {hasApiKey ? 'Đã kết nối' : 'Thiếu API Key'}
                 </span>
             </div>
           </div>
         </div>
         
-        <div className="hidden md:flex items-center gap-6">
-          <button 
-            onClick={() => { if(window.confirm("Xóa lịch sử?")) setMessages([]) }}
-            className="text-sm font-medium text-slate-600 hover:text-red-600 transition-colors flex items-center gap-2"
-          >
-            <i className="fa-solid fa-trash-can"></i> Xóa lịch sử
-          </button>
+        <div className="flex items-center gap-4">
           <button 
             onClick={handleConnectKey}
-            className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-full hover:bg-slate-800 transition-all shadow-sm flex items-center gap-2"
+            className="px-4 py-2 bg-slate-900 text-white text-[10px] font-bold rounded-lg hover:bg-slate-800 transition-all flex items-center gap-2"
           >
-             <i className="fa-solid fa-key"></i> ĐỔI API KEY
+             <i className="fa-solid fa-key"></i> KẾT NỐI API KEY
           </button>
         </div>
       </nav>
 
       <main className="flex-1 flex flex-col md:flex-row p-4 md:p-6 gap-6 overflow-hidden">
-        <div className="w-full md:w-1/3 lg:w-1/4 h-[300px] md:h-full shrink-0">
+        <div className="w-full md:w-1/3 lg:w-1/4 h-[250px] md:h-full shrink-0">
           <KnowledgeBase 
             documents={allDocuments} 
             onAddDocument={handleAddDocument}
@@ -249,21 +233,11 @@ const App: React.FC = () => {
       </main>
 
       <footer className="bg-white border-t border-slate-200 px-6 py-2 text-center text-[10px] text-slate-400 flex justify-between items-center">
-        <span>Bản quyền &copy; 2024 BHXH cơ sở Châu Thành tỉnh An Giang - Đ.T.Tùng.</span>
-        <span className="flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            <i className="fa-solid fa-database text-blue-500"></i>
-            {globalDocuments.length} Hệ thống
-          </span>
-          <span className="flex items-center gap-1">
-            <i className="fa-solid fa-hard-drive text-slate-400"></i>
-            {localDocuments.length} Cá nhân
-          </span>
-          <span className="flex items-center gap-1">
-            <i className="fa-solid fa-shield-halved text-emerald-500"></i>
-            SSL 256-bit Encrypted
-          </span>
-        </span>
+        <span>&copy; 2024 BHXH cơ sở Châu Thành - Đ.T.Tùng</span>
+        <div className="flex gap-4">
+          <span className="flex items-center gap-1"><i className="fa-solid fa-database text-blue-500"></i> {globalDocuments.length} Hệ thống</span>
+          <span className="flex items-center gap-1"><i className="fa-solid fa-hard-drive text-slate-400"></i> {localDocuments.length} Cá nhân</span>
+        </div>
       </footer>
     </div>
   );

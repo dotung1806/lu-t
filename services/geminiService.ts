@@ -17,9 +17,20 @@ export async function askLegalAssistant(
   history: Message[], 
   documents: Document[]
 ): Promise<string> {
-  // Fix: Exclusively use process.env.API_KEY to initialize the GoogleGenAI client.
-  // We initialize the client inside the function call to ensure the latest API key from the environment is used.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Lấy API Key an toàn để không bị lỗi 'process is not defined'
+  let apiKey = "";
+  try {
+    apiKey = process.env.API_KEY || "";
+  } catch (e) {
+    console.warn("Không thể truy cập process.env trực tiếp.");
+  }
+
+  if (!apiKey || apiKey === "undefined") {
+    return "LỖI: Hệ thống chưa nhận được API Key.\n\nHướng dẫn: Nếu bạn đang mở web trực tiếp (vercel.app), hãy đảm bảo đã Redeploy sau khi thêm Key. Nếu vẫn lỗi, hãy mở ứng dụng thông qua giao diện Quản lý của AI Studio/Vercel để sử dụng nút 'KẾT NỐI KEY'.";
+  }
+
+  // Khởi tạo instance ngay trước khi gọi để đảm bảo lấy key mới nhất
+  const ai = new GoogleGenAI({ apiKey });
 
   const knowledgeContext = documents.length > 0 
     ? `DỮ LIỆU KIẾN THỨC TẠI CHỖ:\n${documents.map((doc, index) => `[Văn bản ${index + 1}]: ${doc.name}\nNội dung: ${doc.content}`).join('\n\n')}`
@@ -28,22 +39,19 @@ export async function askLegalAssistant(
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `DỮ LIỆU KIẾN THỨC CỦA TÔI:\n${knowledgeContext}\n\nYÊU CẦU NGƯỜI DÙNG: ${question}`,
+      contents: `DỮ LIỆU KIẾN THỨC:\n${knowledgeContext}\n\nYÊU CẦU: ${question}`,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.1, // High precision for legal text
+        temperature: 0.1,
       },
     });
 
-    // Fix: text is a property of GenerateContentResponse, do not call it as a function.
-    return response.text || "AI không thể trả lời. Vui lòng thử lại.";
+    return response.text || "AI không trả về nội dung.";
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    
     if (error.message?.includes("API key not valid")) {
-      throw new Error("API Key của bạn không hợp lệ hoặc đã hết hạn.");
+      return "LỖI: API Key không hợp lệ hoặc đã hết hạn.";
     }
-    
-    throw error;
+    return `Lỗi kết nối AI: ${error.message}`;
   }
 }
